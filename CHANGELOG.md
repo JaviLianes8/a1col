@@ -8,4 +8,4 @@ All notable changes to this project are documented here. The format follows
 
 ## [0.1.0]
 
-- First release.
+- Add `column_to_index` and `index_to_column` for A1 column letters and one-based indices.

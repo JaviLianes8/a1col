@@ -5,13 +5,13 @@ build-backend = "hatchling.build"
 [project]
 name = "a1col"
 version = "0.1.0"
-description = "Convert between spreadsheet A1 notation and one-based indices: column letters, cell references, and absolute markers"
+description = "Convert spreadsheet A1 column letters to one-based indices and back"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Javier Lianes", email = "javier@lianes8studio.com" }]
-keywords = []
+keywords = ["spreadsheet", "a1", "column", "index", "excel"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
