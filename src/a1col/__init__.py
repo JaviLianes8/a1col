@@ -1,4 +1,4 @@
-"""Convert between spreadsheet A1 notation and one-based indices: column letters, cell references, and absolute markers"""
+"""Spreadsheet A1 notation and one-based index conversion for columns and cell references."""
 
 from __future__ import annotations
 
