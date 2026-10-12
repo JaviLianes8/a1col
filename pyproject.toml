@@ -4,14 +4,14 @@ build-backend = "hatchling.build"
 
 [project]
 name = "a1col"
-version = "0.1.0"
-description = "Convert spreadsheet A1 column letters to one-based indices and back"
+version = "0.2.0"
+description = "Spreadsheet A1 references: column letters, cells, ranges, sheets and R1C1, typed and dependency free"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Javier Lianes", email = "javier@lianes8studio.com" }]
-keywords = ["spreadsheet", "a1", "column", "index", "excel"]
+keywords = ["spreadsheet", "a1", "r1c1", "column", "index", "range", "excel", "cell"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -19,6 +19,9 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = []
+
+[project.scripts]
+a1col = "a1col._cli:main"
 
 [project.optional-dependencies]
 dev = ["ruff", "mypy", "pytest", "build", "twine"]
