@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import operator
 from dataclasses import dataclass, replace
 
 from ._columns import index_to_column
@@ -11,14 +12,24 @@ from ._sheet import split_sheet, with_sheet_prefix
 from ._tokens import axis_text, cell_coords
 
 
-def check_axis(name: str, value: int, limits: SheetLimits | None) -> None:
-    """Validate a one-based axis value: an int, at least one, within ``limits``."""
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise TypeError(f"{name} must be an int, got {type(value).__name__}")
+def as_int(name: str, value: int) -> int:
+    """Return ``value`` as a plain int (NumPy integers welcome); ``bool`` is refused."""
+    if isinstance(value, bool):
+        raise TypeError(f"{name} must be an int, got bool")
+    try:
+        return operator.index(value)
+    except TypeError:
+        raise TypeError(f"{name} must be an int, got {type(value).__name__}") from None
+
+
+def check_axis(name: str, value: int, limits: SheetLimits | None) -> int:
+    """Validate a one-based axis value and return it as a plain int."""
+    value = as_int(name, value)
     if value < 1:
         raise OutOfBoundsError(f"{name} must be >= 1, got {value}")
     if limits is not None:
         (limits.check_column if name == "column" else limits.check_row)(value)
+    return value
 
 
 def cell_from_body(
@@ -45,8 +56,8 @@ class CellRef:
     sheet: str | None = None
 
     def __post_init__(self) -> None:
-        check_axis("column", self.column, None)
-        check_axis("row", self.row, None)
+        object.__setattr__(self, "column", check_axis("column", self.column, None))
+        object.__setattr__(self, "row", check_axis("row", self.row, None))
         if self.sheet is not None:
             with_sheet_prefix(self.sheet, "")
 
@@ -68,9 +79,8 @@ class CellRef:
         cls, *, column: int, row: int, sheet: str | None = None, limits: SheetLimits | None = None
     ) -> CellRef:
         """Build a relative cell from zero-based indexes (``column=0, row=0`` is ``A1``)."""
+        column, row = as_int("column", column), as_int("row", row)
         for name, value in (("column", column), ("row", row)):
-            if isinstance(value, bool) or not isinstance(value, int):
-                raise TypeError(f"{name} must be an int, got {type(value).__name__}")
             if value < 0:
                 raise OutOfBoundsError(f"zero-based {name} must be >= 0, got {value}")
         return cls(column + 1, row + 1, sheet=sheet).check(limits)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import operator
+
 from ._errors import InvalidColumnError, OutOfBoundsError
 from ._limits import SheetLimits
 
@@ -18,11 +20,15 @@ def _letters(column: str) -> str:
     return letters
 
 
-def _check_index(index: int, base: int) -> None:
-    if isinstance(index, bool) or not isinstance(index, int):
-        raise TypeError(f"column index must be an int, got {type(index).__name__}")
-    if index < base:
-        raise OutOfBoundsError(f"column index must be >= {base}, got {index}")
+def _as_index(index: int, base: int) -> int:
+    # operator.index keeps NumPy integers and other ``__index__`` types working.
+    try:
+        value = operator.index(index)
+    except TypeError:
+        raise TypeError(f"column index must be an int, got {type(index).__name__}") from None
+    if value < base:
+        raise OutOfBoundsError(f"column index must be >= {base}, got {value}")
+    return value
 
 
 def is_column(text: str) -> bool:
@@ -58,10 +64,12 @@ def column_to_index(column: str, *, limits: SheetLimits | None = None) -> int:
 def index_to_column(index: int, *, limits: SheetLimits | None = None) -> str:
     """Return the column letters for a one-based index (``1`` is ``"A"``, ``27`` is ``"AA"``).
 
+    Any integer type works, NumPy integers included (anything with ``__index__``).
+
     Raises:
         OutOfBoundsError: the index is below one, or beyond ``limits.max_columns``.
     """
-    _check_index(index, 1)
+    index = _as_index(index, 1)
     if limits is not None:
         limits.check_column(index)
     letters = ""
@@ -85,5 +93,4 @@ def index0_to_column(index: int, *, limits: SheetLimits | None = None) -> str:
     Raises:
         OutOfBoundsError: the index is negative, or beyond the grid of ``limits``.
     """
-    _check_index(index, 0)
-    return index_to_column(index + 1, limits=limits)
+    return index_to_column(_as_index(index, 0) + 1, limits=limits)

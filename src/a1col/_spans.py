@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
-from typing import ClassVar
+from typing import ClassVar, TypeVar
 
 from ._cell import CellRef, check_axis
 from ._columns import index_to_column
@@ -23,6 +23,9 @@ def _split_pair(text: str, kind: str) -> tuple[str | None, str, str]:
     return sheet, parts[0], parts[1]
 
 
+_S = TypeVar("_S", bound="_Span")
+
+
 @dataclass(frozen=True)
 class _Span:
     first: int
@@ -33,8 +36,8 @@ class _Span:
     _axis: ClassVar[str] = "column"
 
     def __post_init__(self) -> None:
-        check_axis(self._axis, self.first, None)
-        check_axis(self._axis, self.last, None)
+        object.__setattr__(self, "first", check_axis(self._axis, self.first, None))
+        object.__setattr__(self, "last", check_axis(self._axis, self.last, None))
         if self.sheet is not None:
             with_sheet_prefix(self.sheet, "")
 
@@ -67,6 +70,21 @@ class _Span:
 
     def _same_sheet(self, cell: CellRef) -> bool:
         return self.sheet is None or cell.sheet is None or self.sheet == cell.sheet
+
+    def _shift(self: _S, delta: int, only_relative: bool, limits: SheetLimits | None) -> _S:
+        first = self.first + (0 if only_relative and self.first_absolute else delta)
+        last = self.last + (0 if only_relative and self.last_absolute else delta)
+        first, last = check_axis(self._axis, first, limits), check_axis(self._axis, last, limits)
+        return replace(self, first=first, last=last)
+
+    def to_r1c1(self, anchor: CellRef | None = None) -> str:
+        """Return R1C1 text such as ``C1:C3`` or ``R[-1]``; relative bounds use ``anchor``.
+
+        A span whose two bounds render the same is written once (``R2``, ``C[1]``).
+        """
+        from ._r1c1 import span_to_r1c1
+
+        return span_to_r1c1(self, anchor)
 
 
 @dataclass(frozen=True)
@@ -104,17 +122,21 @@ class ColumnSpan(_Span):
             yield index_to_column(column)
 
     def to_range(self, limits: SheetLimits = EXCEL) -> RangeRef:
-        """Return the concrete block from row 1 to ``limits.max_rows`` (Excel by default)."""
+        """Return the concrete block from row 1 to ``limits.max_rows`` (Excel by default).
+
+        The corners come back relative: ``$A:$C`` gives ``A1:C1048576``.
+        """
         limits.check_column(self.high)
         start = CellRef(self.low, 1, sheet=self.sheet)
         return RangeRef(start, CellRef(self.high, limits.max_rows, sheet=self.sheet))
 
     def offset(self, columns: int, *, limits: SheetLimits | None = None) -> ColumnSpan:
         """Move both bounds by ``columns``; raises ``OutOfBoundsError`` off the grid."""
-        first, last = self.first + columns, self.last + columns
-        check_axis("column", first, limits)
-        check_axis("column", last, limits)
-        return replace(self, first=first, last=last)
+        return self._shift(columns, False, limits)
+
+    def translate(self, columns: int, *, limits: SheetLimits | None = None) -> ColumnSpan:
+        """Move only the relative bounds by ``columns``, as copying a formula does."""
+        return self._shift(columns, True, limits)
 
 
 @dataclass(frozen=True)
@@ -145,14 +167,18 @@ class RowSpan(_Span):
         )
 
     def to_range(self, limits: SheetLimits = EXCEL) -> RangeRef:
-        """Return the concrete block from column A to ``limits.max_columns`` (Excel default)."""
+        """Return the concrete block from column A to ``limits.max_columns`` (Excel default).
+
+        The corners come back relative: ``$1:$3`` gives ``A1:XFD3``.
+        """
         limits.check_row(self.high)
         start = CellRef(1, self.low, sheet=self.sheet)
         return RangeRef(start, CellRef(limits.max_columns, self.high, sheet=self.sheet))
 
     def offset(self, rows: int, *, limits: SheetLimits | None = None) -> RowSpan:
         """Move both bounds by ``rows``; raises ``OutOfBoundsError`` off the grid."""
-        first, last = self.first + rows, self.last + rows
-        check_axis("row", first, limits)
-        check_axis("row", last, limits)
-        return replace(self, first=first, last=last)
+        return self._shift(rows, False, limits)
+
+    def translate(self, rows: int, *, limits: SheetLimits | None = None) -> RowSpan:
+        """Move only the relative bounds by ``rows``, as copying a formula does."""
+        return self._shift(rows, True, limits)

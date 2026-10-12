@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import operator
 from dataclasses import dataclass
 
-from ._errors import OutOfBoundsError
+from ._errors import A1Error, OutOfBoundsError
 
 
 @dataclass(frozen=True)
@@ -20,9 +21,15 @@ class SheetLimits:
     max_rows: int
 
     def __post_init__(self) -> None:
-        for field, value in (("max_columns", self.max_columns), ("max_rows", self.max_rows)):
-            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-                raise ValueError(f"{field} must be a positive int, got {value!r}")
+        for field in ("max_columns", "max_rows"):
+            value = getattr(self, field)
+            try:
+                number = None if isinstance(value, bool) else operator.index(value)
+            except TypeError:
+                number = None
+            if number is None or number < 1:
+                raise A1Error(f"{field} must be a positive int, got {value!r}")
+            object.__setattr__(self, field, number)
 
     @property
     def last_column(self) -> str:

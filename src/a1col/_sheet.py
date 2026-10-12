@@ -18,6 +18,9 @@ def _check_name(name: str) -> None:
         raise TypeError(f"sheet name must be a str, got {type(name).__name__}")
     if not name:
         raise InvalidReferenceError("sheet name must not be empty")
+    if ":" in name:
+        # No spreadsheet allows ':' in a sheet name; in a reference it marks a 3D range.
+        raise InvalidReferenceError(f"3D references are not supported: {name!r}")
 
 
 def needs_quotes(name: str) -> bool:
@@ -40,7 +43,7 @@ def quote_sheet_name(name: str) -> str:
     ``'It''s'``. A bare-safe name such as ``Sheet1`` is returned unchanged.
 
     Raises:
-        InvalidReferenceError: the name is empty.
+        InvalidReferenceError: the name is empty or contains ``:``.
     """
     if not needs_quotes(name):
         return name
@@ -67,8 +70,6 @@ def split_sheet(text: str) -> tuple[str | None, str]:
         return None, text
     name, rest = text[:bang], text[bang + 1 :]
     _check_name(name)
-    if ":" in name:
-        raise InvalidReferenceError(f"3D references are not supported: {text!r}")
     if _BARE.fullmatch(name) is None:
         raise InvalidReferenceError(f"sheet name {name!r} must be quoted: {text!r}")
     return name, rest

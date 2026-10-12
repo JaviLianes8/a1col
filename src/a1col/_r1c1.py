@@ -12,9 +12,12 @@ from ._sheet import split_sheet, with_sheet_prefix
 if TYPE_CHECKING:
     from ._cell import CellRef
     from ._range import RangeRef
+    from ._spans import ColumnSpan, RowSpan, _Span
 
 _PART = r"(?:([0-9]+)|\[(-?[0-9]+)\])?"
 _R1C1 = re.compile(rf"[Rr]{_PART}[Cc]{_PART}", re.ASCII)
+_ROWS = re.compile(rf"[Rr]{_PART}", re.ASCII)
+_COLS = re.compile(rf"[Cc]{_PART}", re.ASCII)
 
 
 def _axis(letter: str, value: int, absolute: bool, anchor_value: int | None) -> str:
@@ -94,34 +97,75 @@ def range_from_r1c1(text: str, anchor: CellRef | None, limits: SheetLimits | Non
     return RangeRef(start, end)
 
 
-def a1_to_r1c1(text: str, anchor: CellRef | str | None = None) -> str:
-    """Convert an A1 cell or range (``"B3"``, ``"A1:$C$3"``) to R1C1 text.
+def span_to_r1c1(span: _Span, anchor: CellRef | None) -> str:
+    """Render whole columns as ``C1:C3`` or whole rows as ``R[-1]:R2``."""
+    from ._spans import ColumnSpan
+
+    is_col = isinstance(span, ColumnSpan)
+    letter = "C" if is_col else "R"
+    base = None if anchor is None else (anchor.column if is_col else anchor.row)
+    first = _axis(letter, span.first, span.first_absolute, base)
+    last = _axis(letter, span.last, span.last_absolute, base)
+    return with_sheet_prefix(span.sheet, first if first == last else f"{first}:{last}")
+
+
+def span_from_r1c1(
+    text: str, anchor: CellRef | None, limits: SheetLimits | None
+) -> ColumnSpan | RowSpan | None:
+    """Parse ``R2``, ``R1:R3``, ``C[1]`` or ``C1:C3``; ``None`` if it is not a span."""
+    from ._cell import check_axis
+    from ._spans import ColumnSpan, RowSpan
+
+    sheet, body = split_sheet(text)
+    parts = body.split(":")
+    for pattern, name in ((_ROWS, "row"), (_COLS, "column")):
+        matches = [pattern.fullmatch(part) for part in parts]
+        if len(parts) > 2 or not all(matches):
+            continue
+        base = None if anchor is None else (anchor.row if name == "row" else anchor.column)
+        bounds = [_resolve(name, m[1], m[2], base, text) for m in matches if m is not None]
+        values = [check_axis(name, value, limits) for value, _ in bounds]
+        span_type = RowSpan if name == "row" else ColumnSpan
+        return span_type(values[0], values[-1], bounds[0][1], bounds[-1][1], sheet)
+    return None
+
+
+def a1_to_r1c1(
+    text: str, anchor: CellRef | str | None = None, *, limits: SheetLimits | None = None
+) -> str:
+    """Convert any A1 reference (``"B3"``, ``"A1:$C$3"``, ``"A:C"``, ``"2:2"``) to R1C1.
 
     Relative parts become offsets from ``anchor`` (a ``CellRef`` or A1 text); with no
-    anchor every part is written as an absolute number.
+    anchor every part is written as an absolute number. Whole columns and rows become
+    ``C1:C3`` and ``R2``. With ``limits`` the reference must fit that grid.
 
     Raises:
-        InvalidReferenceError: ``text`` is not an A1 cell or cell range.
+        InvalidReferenceError: ``text`` is not an A1 reference.
+        OutOfBoundsError: ``text`` lies outside ``limits``.
     """
-    from ._cell import CellRef
-    from ._range import RangeRef
+    from ._parse import parse_ref
 
-    if ":" in split_sheet(text)[1]:
-        return RangeRef.parse(text).to_r1c1(_anchor(anchor))
-    return CellRef.parse(text).to_r1c1(_anchor(anchor))
+    return parse_ref(text, limits=limits).to_r1c1(_anchor(anchor))
 
 
-def r1c1_to_a1(text: str, anchor: CellRef | str | None = None) -> str:
-    """Convert an R1C1 cell or range (``"R3C2"``, ``"R[-1]C:R1C[2]"``) to A1 text.
+def r1c1_to_a1(
+    text: str, anchor: CellRef | str | None = None, *, limits: SheetLimits | None = None
+) -> str:
+    """Convert R1C1 text (``"R3C2"``, ``"R[-1]C:R1C[2]"``, ``"R2"``, ``"C1:C3"``) to A1.
 
     Absolute parts come back with ``$`` markers; relative parts are resolved against
-    ``anchor`` and come back without them.
+    ``anchor`` and come back without them. ``R2`` alone is the whole row 2 and ``C3``
+    alone the whole column C, as in a spreadsheet.
 
     Raises:
         InvalidReferenceError: bad syntax, or a relative part with no anchor.
-        OutOfBoundsError: a relative part resolves above row 1 or left of column A.
+        OutOfBoundsError: a part resolves above row 1, left of column A, or past ``limits``.
     """
-    rng = range_from_r1c1(text, _anchor(anchor), None)
+    resolved = _anchor(anchor)
+    span = span_from_r1c1(text, resolved, limits)
+    if span is not None:
+        return str(span)
+    rng = range_from_r1c1(text, resolved, limits)
     return str(rng.start) if ":" not in split_sheet(text)[1] else str(rng)
 
 
