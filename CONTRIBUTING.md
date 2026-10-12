@@ -11,8 +11,9 @@ pip install -r requirements-dev.txt
 ## Before you open a pull request
 
 - Keep public API in `src/a1col/__init__.py`; internals live in `_`-prefixed modules.
-- Add a test for the behaviour you change. Tests inject time, disk and network; they
-  never touch the real thing.
+- Add a test for the behaviour you change, and extend `tests/test_contract.py` when the
+  public API grows. `tests/test_e2e_cli.py` builds the wheel, installs it into a
+  throwaway virtual environment and runs the real `a1col` script.
 - Run `scripts/check.ps1` (format, lint, types, tests) and make sure it passes.
 - One logical change per commit, imperative subject line.
 
