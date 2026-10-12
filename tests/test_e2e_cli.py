@@ -106,6 +106,21 @@ def test_errors_go_to_stderr_with_exit_1(a1col_cli: Path) -> None:
     assert "257" in result.stderr
 
 
+def test_non_ascii_sheet_name_never_crashes(a1col_cli: Path) -> None:
+    result = _run(a1col_cli, "parse", "'日本 Q1'!B2")
+    assert result.returncode == 0, result.stderr
+    assert result.stderr == ""
+    assert "Q1" in result.stdout
+    assert "row: 2" in result.stdout
+
+
+def test_limits_apply_to_r1c1(a1col_cli: Path) -> None:
+    result = _run(a1col_cli, "--limits", "excel97", "a1", "R1C300")
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert "300" in result.stderr
+
+
 def test_help_lists_examples(a1col_cli: Path) -> None:
     result = _run(a1col_cli, "--help")
     assert result.returncode == 0

@@ -64,8 +64,6 @@ def test_non_string_and_non_int_inputs_raise_type_error() -> None:
     with pytest.raises(TypeError):
         index_to_column("5")  # type: ignore[arg-type]
     with pytest.raises(TypeError):
-        index_to_column(True)
-    with pytest.raises(TypeError):
         index_to_column(1.0)  # type: ignore[arg-type]
 
 

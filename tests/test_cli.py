@@ -25,6 +25,11 @@ def run(capsys: pytest.CaptureFixture[str], *args: str) -> tuple[int, str, str]:
         (["r1c1", "A1:$C$3"], "R1C1:R3C3"),
         (["a1", "R[-1]C[2]", "--anchor", "C3"], "E2"),
         (["a1", "R3C2"], "$B$3"),
+        (["r1c1", "A:C"], "C1:C3"),
+        (["r1c1", "2:2", "--anchor", "B2"], "R"),
+        (["a1", "R2"], "$2:$2"),
+        (["a1", "C[1]:C3", "--anchor", "B2"], "C:$C"),
+        (["--limits", "excel97", "a1", "R1C256"], "$IV$1"),
         (["offset", "B2", "--rows", "3", "--columns", "-1"], "A5"),
         (["offset", "$B2:C3", "--rows", "1", "--columns", "1", "--translate"], "$B3:D4"),
         (["offset", "'My Sheet'!A1", "--columns", "2"], "'My Sheet'!C1"),
@@ -78,10 +83,13 @@ def test_cells(capsys: pytest.CaptureFixture[str]) -> None:
         ["--limits", "excel97", "parse", "IW1"],
         ["cells", "A:A"],
         ["a1", "R[1]C"],
-        ["r1c1", "A:B"],
+        ["r1c1", "A1:B"],
         ["offset", "A1", "--rows", "-1"],
         ["offset", "A:B", "--rows", "1"],
         ["parse", "My Sheet!A1"],
+        ["--limits", "excel97", "r1c1", "IW1"],
+        ["--limits", "excel97", "a1", "R1C300"],
+        ["parse", "'Sheet1:Sheet3'!A1"],
     ],
 )
 def test_errors_go_to_stderr_with_exit_1(
@@ -109,3 +117,10 @@ def test_help_has_runnable_examples(capsys: pytest.CaptureFixture[str]) -> None:
     assert "examples:" in out
     assert "a1col column AA" in out
     assert "--limits" in out
+
+
+def test_non_ascii_sheet_names(capsys: pytest.CaptureFixture[str]) -> None:
+    code, out, err = run(capsys, "parse", "--json", "'日本 Q1'!A1")
+    assert (code, err) == (0, "")
+    data = json.loads(out)
+    assert (data["sheet"], data["a1"]) == ("日本 Q1", "'日本 Q1'!A1")
