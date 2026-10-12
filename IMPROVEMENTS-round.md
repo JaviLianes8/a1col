@@ -35,7 +35,8 @@ zero-based variant, no R1C1 support, no typed error and no command line entry po
 
 5. **R1C1 <-> A1 relative to an anchor cell.** `to_r1c1(anchor)` writes absolute
    parts as `R5C3` and relative parts as `R[-1]C[2]` offsets from the anchor;
-   `from_r1c1(text, anchor)` resolves them back. Works for cells and ranges, with
+   `from_r1c1(text, anchor)` resolves them back. Works for cells, ranges, whole rows
+   (`R2`) and whole columns (`C1:C3`), with
    string helpers `a1_to_r1c1` and `r1c1_to_a1`. Round-trips are exact.
 
 6. **Configurable application limits.** `SheetLimits` with ready presets `EXCEL`
@@ -74,5 +75,5 @@ zero-based variant, no R1C1 support, no typed error and no command line entry po
 ## Out of scope
 
 3D references across several sheets (`Sheet1:Sheet3!A1`), structured table
-references, named ranges and whole-row or whole-column R1C1 forms are rejected with
-a clear error rather than half supported.
+references and named ranges are rejected with a clear error rather than half
+supported.

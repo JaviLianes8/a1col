@@ -62,6 +62,7 @@ from a1col import EXCEL, EXCEL_97, CellRef, a1_to_r1c1, r1c1_to_a1
 a1_to_r1c1("B3", "A1")  # "R[2]C[1]"
 r1c1_to_a1("R[-1]C[2]", "C3")  # "E2"
 r1c1_to_a1("R5C3")  # "$C$5"
+a1_to_r1c1("A:C")  # "C1:C3"
 
 CellRef.parse("XFD1048576", limits=EXCEL)  # fine, the last Excel cell
 CellRef.parse("IW1", limits=EXCEL_97)  # raises OutOfBoundsError
@@ -75,7 +76,8 @@ Presets: `EXCEL` (16,384 columns to `XFD`, 1,048,576 rows), `EXCEL_97` (256 by
 
 Every error is a `ValueError` subclass of `A1Error`: `InvalidReferenceError` (with
 `InvalidColumnError` and `InvalidRowError` below it) for bad text, and
-`OutOfBoundsError` for numbers below one or past the chosen limits.
+`OutOfBoundsError` for numbers below one or past the chosen limits. A wrong argument
+type (for example a float where an index is expected) raises `TypeError`.
 
 ## Command line
 

@@ -17,6 +17,8 @@ is 16,384. Letters are ASCII and case-insensitive, and one leading `$` is allowe
 | `is_column` | n/a | `is_column("$xfd") is True`, never raises |
 
 Each conversion takes an optional `limits=`. Without it any length is accepted.
+Indexes may be any integer type, NumPy integers included (anything with
+`__index__`).
 
 ## Cells: `CellRef`
 
@@ -46,7 +48,9 @@ value, markers and sheet included.
   spreadsheet does to a formula copied to another cell: `$B3` by (1, 1) is `$B4`.
 
 Both raise `OutOfBoundsError` instead of producing row 0, column 0 or a cell past
-`limits`. `RangeRef`, `ColumnSpan` and `RowSpan` offer the same moves.
+`limits`. `RangeRef` offers the same two moves with the same keywords. `ColumnSpan`
+and `RowSpan` move along their own axis only: `ColumnSpan.offset(columns)`,
+`ColumnSpan.translate(columns)`, `RowSpan.offset(rows)` and `RowSpan.translate(rows)`.
 
 ## Ranges: `RangeRef`
 
@@ -81,6 +85,8 @@ str(ColumnSpan.parse("A:C").to_range())  # "A1:C1048576"
 str(ColumnSpan.parse("A:C").to_range(EXCEL_97))  # "A1:C65536"
 ```
 
+The corners of `to_range` come back relative, whatever markers the span had.
+
 ## One front door: `parse_ref`
 
 `parse_ref(text)` returns a `CellRef`, `RangeRef`, `ColumnSpan` or `RowSpan`
@@ -101,8 +107,12 @@ else is wrapped in single quotes and every quote inside is doubled.
 | `A1`, `R1C1`, `C3` | `'A1'!A1`, `'R1C1'!A1`, `'C3'!A1` |
 
 `quote_sheet_name`, `needs_quotes` and `split_sheet` expose these rules. Parsing
-accepts quoted names containing anything, including `!`. Three-dimensional
-references (`Sheet1:Sheet3!A1`) are rejected.
+accepts quoted names containing anything except `:`, including `!`. Parsing is
+lenient about one thing: a bare name that would need quotes only because it reads
+as a reference (`A1!B2`) is accepted, and printed back quoted (`'A1'!B2`).
+Three-dimensional references (`Sheet1:Sheet3!A1`, `'Sheet 1:Sheet 3'!A1`) are
+rejected, and no sheet name may contain `:`. Other application-specific rules, such
+as the 31 character limit in Excel, are not enforced.
 
 ## R1C1 notation
 
@@ -124,8 +134,21 @@ r1c1_to_a1("R[-1]C:R1C[2]", "B2")  # "B1:D$1"
 CellRef.from_r1c1("R[-1]C[2]", CellRef.parse("C3"))  # E2
 ```
 
-Rules: letters `R` and `C` are case-insensitive; a bare `R` or `C` means offset 0;
-offsets are signed integers without a `+` and without leading zeros. Absolute parts
+Whole rows and columns work too: `R2` is row 2, `R[-1]:R1` a block of rows, `C3`
+column C, and a lone `R` or `C` the anchor's own row or column.
+
+```python
+from a1col import a1_to_r1c1, r1c1_to_a1
+
+a1_to_r1c1("A:C")  # "C1:C3"
+a1_to_r1c1("$2:$2")  # "R2"
+r1c1_to_a1("C[1]:C3", "B2")  # "C:$C"
+```
+
+Rules: letters `R` and `C` are case-insensitive; inside a reference a bare `R` or
+`C` means offset 0 (`RC`, `R1C`, `RC1`); offsets are signed integers without a `+`
+and without leading zeros. `a1_to_r1c1` and `r1c1_to_a1` take `limits=` like the
+parsers. Absolute parts
 come back with `$` markers. Parsing a relative part without an anchor raises
 `InvalidReferenceError`; converting to R1C1 without an anchor writes every part as
 an absolute number. With an anchor, conversions round-trip exactly.
@@ -137,7 +160,7 @@ an absolute number. With an anchor, conversions round-trip exactly.
 | `EXCEL` | 16,384 (`XFD`) | 1,048,576 |
 | `EXCEL_97` | 256 (`IV`) | 65,536 |
 | `LIBREOFFICE` | 16,384 (`XFD`), Calc 7.4 and later | 1,048,576 |
-| `GOOGLE_SHEETS` | 18,278 (`ZZZ`) | 10,000,000, the 10 million cell ceiling |
+| `GOOGLE_SHEETS` | 18,278 (`ZZZ`) | 10,000,000 (no fixed row limit; derived from the 10 million cell cap) |
 
 Define your own with `SheetLimits("Mine", max_columns, max_rows)`. Pass any of them
 as `limits=` to parsers and movers, or use `check_column`, `check_row`, `contains`
@@ -155,7 +178,7 @@ ValueError
 ```
 
 Passing a non-string where text is expected, or a non-integer where a number is
-expected, raises `TypeError`.
+expected, raises `TypeError`. An invalid `SheetLimits` raises `A1Error`.
 
 ## Command line
 
@@ -168,9 +191,9 @@ a1col [--limits {none,excel,excel97,libreoffice,google-sheets}] COMMAND
 | `column VALUE [--zero-based]` | letters to a number, or a number to letters |
 | `parse REF [--json]` | kind, sheet, canonical text, bounds and size |
 | `cells REF [--by-row]` | every cell of a range; whole spans need `--limits` |
-| `r1c1 REF [--anchor CELL]` | A1 to R1C1 |
-| `a1 REF [--anchor CELL]` | R1C1 to A1 |
+| `r1c1 REF [--anchor CELL]` | A1 to R1C1, whole columns and rows included |
+| `a1 REF [--anchor CELL]` | R1C1 to A1, whole columns and rows included |
 | `offset REF --rows N --columns N [--translate]` | move a cell or range |
 
-Results print to stdout with exit code 0. Every error prints `a1col: error: ...` to
+`--limits` applies to every command. Results print to stdout with exit code 0. Every error prints `a1col: error: ...` to
 stderr with exit code 1, usage errors included.
