@@ -42,6 +42,7 @@ def describe(ref: AnyRef) -> dict[str, Any]:
     else:
         data["kind"] = "columns" if isinstance(ref, ColumnSpan) else "rows"
         data.update(first=ref.first, last=ref.last, count=ref.count)
+    data["a1"] = str(ref)  # the full text, sheet included, even for a single cell
     return data
 
 

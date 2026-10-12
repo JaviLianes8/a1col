@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import errno
+import io
 import json
 import os
 import sys
@@ -37,6 +39,7 @@ examples:
   a1col cells --by-row A1:C2         # one tab-separated line per row
   a1col --limits excel cells A:A     # whole columns need a grid size
   a1col r1c1 B3 --anchor A1          # R[2]C[1]
+  a1col r1c1 A:C                     # C1:C3
   a1col a1 "R[-1]C[2]" --anchor C3   # E2
   a1col offset B2 --rows 3 --columns -1   # A5
   a1col --limits excel97 parse IW1   # error: past column IV, exit 1
@@ -77,7 +80,7 @@ def build_parser() -> argparse.ArgumentParser:
     cells.add_argument("--by-row", action="store_true", help="one tab-separated line per row")
     for name, helptext in (("r1c1", "A1 to R1C1"), ("a1", "R1C1 to A1")):
         conv = sub.add_parser(name, help=helptext)
-        conv.add_argument("ref", help="cell or cell range")
+        conv.add_argument("ref", help="cell, cell range, whole columns or whole rows")
         conv.add_argument("--anchor", help="cell that relative parts are measured from")
     move = sub.add_parser("offset", help="move a cell or range")
     move.add_argument("ref", help="cell or cell range")
@@ -112,7 +115,7 @@ def _run(args: argparse.Namespace) -> Iterable[str]:
     if args.command == "cells":
         rng = _range_for_cells(args.ref, limits)
         if args.by_row:
-            return ("	".join(map(str, row)) for row in rng.rows())
+            return ("\t".join(map(str, row)) for row in rng.rows())
         return map(str, rng.cells())
     return [_run_one(args, limits)]
 
@@ -122,16 +125,15 @@ def _run_one(args: argparse.Namespace, limits: SheetLimits | None) -> str:
         return _column(args.value, args.zero_based, limits)
     if args.command == "parse":
         ref = parse_ref(args.ref, limits=limits)
-        return json.dumps(describe(ref), indent=2) if args.json else describe_text(ref)
-    if args.command == "cells":
-        rng = _range_for_cells(args.ref, limits)
-        if args.by_row:
-            return "\n".join("\t".join(map(str, row)) for row in rng.rows())
-        return "\n".join(map(str, rng.cells()))
+        return (
+            json.dumps(describe(ref), indent=2, ensure_ascii=False)
+            if args.json
+            else describe_text(ref)
+        )
     if args.command == "r1c1":
-        return a1_to_r1c1(args.ref, args.anchor)
+        return a1_to_r1c1(args.ref, args.anchor, limits=limits)
     if args.command == "a1":
-        return r1c1_to_a1(args.ref, args.anchor)
+        return r1c1_to_a1(args.ref, args.anchor, limits=limits)
     target = parse_ref(args.ref, limits=limits)
     if not isinstance(target, (CellRef, RangeRef)):
         raise A1Error(f"offset needs a cell or a cell range: {args.ref!r}")
@@ -142,15 +144,23 @@ def _run_one(args: argparse.Namespace, limits: SheetLimits | None) -> str:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the command line tool and return its exit status (0 ok, 1 on any error)."""
     args = build_parser().parse_args(argv)
+    for stream in (sys.stdout, sys.stderr):
+        # Sheet names may hold any character; never crash on a narrow console encoding.
+        if isinstance(stream, io.TextIOWrapper):
+            stream.reconfigure(errors="backslashreplace")
     try:
         for line in _run(args):
             print(line)
+        sys.stdout.flush()
     except (A1Error, TypeError) as exc:
         print(f"a1col: error: {exc}", file=sys.stderr)
         return 1
-    except OSError:
-        # The reader (for example ``head``) closed the pipe early; that is not an error.
-        sys.stdout = open(os.devnull, "w")  # noqa: SIM115
+    except OSError as exc:
+        # A reader such as ``head`` closed the pipe early (EINVAL on Windows): not an error.
+        if not isinstance(exc, BrokenPipeError) and exc.errno != errno.EINVAL:
+            raise
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
         return 0
     return 0
 
